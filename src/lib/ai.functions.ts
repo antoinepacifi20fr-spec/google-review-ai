@@ -1,4 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
+import { generateText } from "ai";
+import { gateway } from "@ai-sdk/gateway";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
@@ -21,18 +23,9 @@ const LENGTH: Record<string, string> = {
 const PERSO: Record<string, string> = {
   faible: "Reste général, ne reprends qu'un élément de l'avis.",
   moyenne: "Reprends un ou deux éléments concrets de l'avis.",
-  elevee: "Reprends précisément les éléments concrets mentionnés par le client, avec des formulations propres à cet avis.",
+  elevee:
+    "Reprends précisément les éléments concrets mentionnés par le client, avec des formulations propres à cet avis.",
 };
-
-function extractText(res: unknown): string {
-  const r = res as { output?: Array<{ type?: string; content?: Array<{ type?: string; text?: string }> }> };
-  const parts: string[] = [];
-  for (const item of r.output ?? []) {
-    if (item.type !== "message") continue;
-    for (const c of item.content ?? []) if (c.type === "output_text" && c.text) parts.push(c.text);
-  }
-  return parts.join("").trim();
-}
 
 export const generateReply = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -47,7 +40,8 @@ export const generateReply = createServerFn({ method: "POST" })
     if (rErr || !review) throw new Error("Avis introuvable ou accès refusé.");
 
     const { data: canEdit } = await supabase.rpc("can_edit", { _business: review.business_id });
-    if (!canEdit) throw new Error("Vous n'avez pas les droits de modification sur cet établissement.");
+    if (!canEdit)
+      throw new Error("Vous n'avez pas les droits de modification sur cet établissement.");
 
     const { data: biz } = await supabase
       .from("businesses")
@@ -57,7 +51,11 @@ export const generateReply = createServerFn({ method: "POST" })
     if (!biz) throw new Error("Établissement introuvable.");
 
     const lang =
-      biz.language === "en" ? "anglais" : biz.language === "auto" ? "la langue de l'avis" : "français";
+      biz.language === "en"
+        ? "anglais"
+        : biz.language === "auto"
+          ? "la langue de l'avis"
+          : "français";
 
     const instructions = [
       `Tu rédiges, pour le compte de l'établissement « ${biz.name} »${biz.specialty ? ` (${biz.specialty})` : ""}${biz.city ? ` à ${biz.city}` : ""}, une réponse publique à un avis Google.`,
@@ -71,12 +69,16 @@ export const generateReply = createServerFn({ method: "POST" })
       "- Évite les formules toutes faites (« Nous avons bien pris note », « Votre satisfaction est notre priorité »). Varie l'ouverture.",
       "- Utilise le prénom de l'auteur seulement s'il apparaît clairement comme un prénom ; jamais le nom de famille.",
       "- Pas d'emoji, pas de hashtag, pas de guillemets autour de la réponse, pas d'objet ni de titre.",
-      biz.signature ? `- Termine par cette signature exacte sur une nouvelle ligne : ${biz.signature}` : "- Pas de signature.",
+      biz.signature
+        ? `- Termine par cette signature exacte sur une nouvelle ligne : ${biz.signature}`
+        : "- Pas de signature.",
       "Retourne uniquement le texte de la réponse.",
     ].join("\n");
 
     const userPrompt = [
-      biz.context ? `Contexte de l'établissement (source fiable) :\n${biz.context}` : "Contexte de l'établissement : non renseigné.",
+      biz.context
+        ? `Contexte de l'établissement (source fiable) :\n${biz.context}`
+        : "Contexte de l'établissement : non renseigné.",
       biz.brand_instructions ? `Consignes de marque :\n${biz.brand_instructions}` : "",
       `Avis à traiter :\n- Auteur : ${review.author_name}\n- Note : ${review.rating}/5\n- Date : ${review.review_date}\n- Texte : ${review.comment ? review.comment : "(aucun texte, note seule)"}`,
       data.hint ? `Indication de l'utilisateur pour cette version : ${data.hint}` : "",
@@ -85,18 +87,17 @@ export const generateReply = createServerFn({ method: "POST" })
       .join("\n\n");
 
     try {
-      const { generateResponse } = await import("@lovable.dev/ai-gateway");
-      const res = await generateResponse({
-        model: "openai/gpt-6-astra",
-        instructions,
-        input: userPrompt,
+      const { text } = await generateText({
+        model: gateway("google/gemini-3.5-flash"),
+        system: instructions,
+        prompt: userPrompt,
       });
-      const text = extractText(res);
-      if (!text) throw new Error("Le service d'IA n'a renvoyé aucun texte.");
+      const reply = text.trim();
+      if (!reply) throw new Error("Le service d'IA n'a renvoyé aucun texte.");
 
       const { error: uErr } = await supabase
         .from("reviews")
-        .update({ reply_text: text, reply_status: "to_validate", reply_generated_by_ai: true })
+        .update({ reply_text: reply, reply_status: "to_validate", reply_generated_by_ai: true })
         .eq("id", review.id);
       if (uErr) throw new Error(uErr.message);
       await supabase.from("review_events").insert({
@@ -104,25 +105,38 @@ export const generateReply = createServerFn({ method: "POST" })
         review_id: review.id,
         user_id: userId,
         type: "generated",
-        detail: { model: "openai/gpt-6-astra", regenerated: Boolean(review.reply_text) },
+        detail: { model: "google/gemini-3.5-flash", regenerated: Boolean(review.reply_text) },
       });
-      return { text };
+      return { text: reply };
     } catch (e) {
-      const err = e as { name?: string; code?: string; message?: string; httpStatus?: number };
-      let message = "La génération a échoué. Vous pouvez réessayer ou rédiger la réponse manuellement.";
-      if (err.code === "payment_required" || err.httpStatus === 402)
-        message = "Crédits IA épuisés sur l'espace de travail. Rédigez la réponse manuellement ou rechargez les crédits.";
-      else if (err.code === "rate_limited" || err.httpStatus === 429)
+      const err = e as {
+        name?: string;
+        code?: string;
+        message?: string;
+        httpStatus?: number;
+        statusCode?: number;
+      };
+      const status = err.httpStatus ?? err.statusCode;
+      let message =
+        "La génération a échoué. Vous pouvez réessayer ou rédiger la réponse manuellement.";
+      if (err.code === "payment_required" || status === 402)
+        message =
+          "Crédits IA épuisés sur l'espace de travail. Rédigez la réponse manuellement ou rechargez les crédits.";
+      else if (err.code === "rate_limited" || status === 429)
         message = "Trop de demandes au service d'IA. Patientez une minute avant de réessayer.";
-      else if (err.code === "configuration_error" || err.code === "authentication_error")
+      else if (
+        err.code === "configuration_error" ||
+        err.code === "authentication_error" ||
+        status === 401
+      )
         message = "Service d'IA non configuré pour cette application (configuration requise).";
-      console.error("generateReply failed", err.code, err.httpStatus, err.message);
+      console.error("generateReply failed", err.code, status);
       await supabase.from("review_events").insert({
         business_id: review.business_id,
         review_id: review.id,
         user_id: userId,
         type: "generation_error",
-        detail: { code: err.code ?? err.name ?? "unknown", status: err.httpStatus ?? null },
+        detail: { code: err.code ?? err.name ?? "unknown", status: status ?? null },
       });
       throw new Error(message);
     }
