@@ -1,14 +1,42 @@
-# Welcome to your Lovable project
+# Google Review AI
+
+Construis maintenant le vrai SaaS "Google Review AI" en FRANÇAIS, dans ce projet Lovable, en allant le plus loin possible jusqu'à une application complète réellement utilisable (frontend + backend + auth + BD + IA). C'est un projet produit sérieux, pas une maquette. Le propriétaire veut un agent IA pour répondre aux avis des établissements Google Business Profile, avec des réglages, de vrais avis, validation humaine, puis publication réelle dès que Google accorde l'API. L'accès API GBP de son projet Google Cloud a actuellement été REFUSÉ par Google; NE PAS prétendre que nous pouvons lire ou publier automatiquement les avis depuis GBP pour le moment. L'utilisateur est gestionnaire autorisé de la fiche vérifiée "Sylvie ROCH" (la propriétaire est sa mère, autre compte), mais cela ne remplace pas l'approbation API. Objectif coût minimal/free tier si possible, sans mentir sur les plafonds/coûts.
+
+OBJECTIF CRITIQUE: construire maintenant une application utilisable avec du vrai état persistant et les fonctionnalités entièrement fonctionnelles là où l'accès existe: inscription/connexion, entreprise/profil, import manuel de vrais avis, tableau de bord calculé depuis ces avis, IA rédaction personnalisée, workflow "À traiter" et "Approuvés", réglages persistants, copie de la réponse prête à publier manuellement dans Google Business Profile. Architecture propre séparant provider GBP pour le brancher dès approbation API; ne pas simuler de fausses données Google ni de fonctionnalités en production. Tout ce qui requiert GBP doit être affiché comme "Connexion Google Business Profile en attente d'autorisation" avec explication, pas faux succès. Le bouton "Se connecter avec Google" pour l'AUTH de l'app (si pris en charge) est différent de l'autorisation Google Business Profile, et cela doit être clair. Aucune collecte de mot de passe Google.
+
+ESTHÉTIQUE (EXTRÊMEMENT IMPORTANT):
+- Design NOIR ET BLANC, minimaliste éditorial, premium, sobre, mature et très professionnel. PAS de "AI slop". Éviter ABSOLUMENT gradients, glassmorphism, halos, flous colorés, violet, bleu néon, bento générique, boutons factices, emojis, illustrations SaaS artificielles, énormes chiffres fictifs, faux graphes, micro-interactions tape-à-l'œil.
+- Inspiré d'une application B2B haut de gamme / Linear-like sobriété, Notion-quiet typography, Stripe-dashboard pour la clarté, mais design ORIGINAL sans copier.
+- Surface #FAFAF9 ou #FFFFFF, textes #111111, nuances #666, séparateurs fins #E7E7E5. Accent strictement noir/blanc; états d'erreur subtils sans palette vive; typographie Geist/Inter excellente hiérarchie; coins doux mais retenus 6-10px; densité maîtrisée, alignements impeccables, grille 8px, marges généreuses. Sidebar fixe 228px avec wordmark typographique "Google Review AI" ou monogramme G/RA discret; navigation: Vue d'ensemble, Avis, À traiter, Historique, Paramètres. Header fin, contexte d'établissement, état de connexion.
+- Landing / login peuvent être minimalistes, crédibles, et la page en état vide doit être belle et utile. Pas de fake images, pas de faux logos, pas de données préremplies. Responsive desktop/mobile, accessible clavier, focus visibles, loading/skeletons discrets, vrais états vides, erreurs honnêtes.
+- Priorité qualité visuelle premium non généricité. Tous les éléments cliquables font une action réelle.
+
+PAGES ET FONCTIONNALITÉS:
+(1) Auth sécurisé (via Lovable Cloud/Supabase auth si disponible) email et mot de passe, déconnexion, éventuellement OAuth Google Auth si supporté avec configuration réelle; pas d'auth fictive. Routes privées. Page onboarding de création d'établissement, éventuellement plusieurs établissements par compte; compte et données cloisonnés par utilisateur/établissement avec RLS et politiques strictes. Préparer capacités membres/roles si faisable. Établissement "Sylvie ROCH" peut être saisi à l'onboarding, ne pas le créer fictivement pour les utilisateurs. Sauvegarde des préférences/business: nom, spécialité, ton, langue, contexte, consignes.
+(2) Dashboard VRAIS KPIs calculés à partir des avis enregistrés: nombre d'avis importés, note moyenne des avis importés, distribution étoiles, pourcentage ayant une réponse enregistrée, avis à traiter. Signaler clairement "Données importées manuellement — pas de synchronisation Google" et ne jamais étiqueter comme tous les avis Google, surtout pour stats partielles. Si 0: super empty-state CTA "Importer un avis". Périodes et filtres seulement s'ils fonctionnent. Pas de stats fabriquées ni d'historique fake.
+(3) Avis: liste/tableau dense avec tri/filtres note/date/statut, recherche, étoiles, auteur, date, commentaire, source "Import manuel", statut, aperçu de réponse. Import manuel par formulaire (nom auteur, note 1..5, date, texte, identifiant externe facultatif, réponse existante facultative) + import CSV validé (mapping colonnes clair si possible, erreurs affichées, doublons évités). Les avis conservés sont réellement ceux de l'utilisateur; aucune récolte non consentie. L'utilisateur peut supprimer/corriger.
+(4) "À traiter" règle d'origine par défaut: avis STRICTEMENT <4 étoiles à validation manuelle. Seuil configurable. Un avis importé sous le seuil entre automatiquement en file; au-dessus peut aussi être traité manuellement selon réglage. Interface panneau de détail élégante: avis intégral, contexte, réponse IA générée, [Générer] / [Régénérer] / [Modifier] / [Approuver] / [Rejeter/Réouvrir] / [Copier pour Google]. Les réponses ne sont JAMAIS considérées publiées automatiquement sans confirmation réelle API. Statuts distincts: "Brouillon", "À valider", "Approuvée", "Publiée manuellement" (sur attestation volontaire) et "Publiée via API" seulement à réception d'un vrai succès provider; historique événements daté.
+(5) AGENT IA RÉEL intégré (pas simple réponse codée en dur): génération via un service d'IA réel disponible à l'app (Lovable AI / Edge function server-side / connexion configurée), jamais de clés exposées au frontend, gestion erreurs/clés manquantes sans faux texte IA. Personnalisation par avis, note, ton, consignes, secteur, prénom de la marque; réponses en français naturel, diverses, pas génériques. Ne pas inventer des faits, engagements, remboursements ni informations sur clients. Avis négatifs: empathie, propose contact privé si nécessaire, évite exposer PII. Bouton "Regénérer" fait une vraie nouvelle requête IA, modifiable, possibilité d'écrire manuellement si service indisponible. Un agent mode Actif/Inactif stocké, dont l'action réelle est génération de propositions sur les nouveaux avis importés si activé; aucun auto-post possible avant accès API. Si tâches en arrière-plan impossibles sans service cron, ne pas prétendre agir 24/7.
+(6) Paramètres avec vrais contrôles persistants: agent ON/OFF; règle <4 étoiles (slider ou select 1-5), inclure 4/5 si choix, exiger approbation humaine avant toute publication, langue/tone options, niveau de personnalisation, instructions de marque, signature optionnelle, longueur des réponses, ne pas répondre automatiquement aux avis sans texte; pour mode auto-publication futur, le laisser clairement "Indisponible tant que GBP API non connectée" (disabled + explication). Profil établissement, compte, données, sécurité, gestion de la connexion intégration GBP (pending).
+(7) Historique: audit réel des générations, modifications, approbations, copies, marquages "Publié manuellement", erreurs éventuelles; affichage daté basé sur BD, pas mock.
+(8) Intégration Google: créer une interface/provider propre prévue pour Google Business Profile OAuth et endpoints d'avis, mais ne pas activer sans autorisation et ne PAS scraper Google ou demander les cookies/mots de passe ni extraire une clé d'un fournisseur. Une vraie page "Intégrations" expliquant le statut et que la connexion Google Auth de l'application ne donne pas accès aux avis GBP. Proposer un lien officiel vers docs et portail. Pour la publication manuelle, un bouton "Copier la réponse" qui copie réellement et un lien "Ouvrir les avis dans Google" vers https://business.google.com/ (pas prétendre la publication effectuée).
+
+EXIGENCES ENGINEERING:
+- App TypeScript propre, frontend React/Tailwind/shadcn, backend sécurisé et BD postgres (Lovable Cloud si supporté). Migrations, RLS multi-utilisateur, validations Zod, contraintes BD, gestion doublons CSV, erreurs, contrôle d'accès server-side, permissions séparées. Aucune clé API client. UX complète avec toasts honnêtes, sécurité et protection PII. Stockage durable. Do not store secrets in client localStorage. Protections basiques XSS/CSRF, contrôle RLS, imports bornés/validés.
+- Éviter les composants/statistiques factices, données de démonstration dans comptes réels, fake charts, fake connect buttons, mock service IA. Si une fonctionnalité requiert une étape manuelle ou un secret externe, implémenter le reste, afficher un état "Configuration requise" fonctionnel et dire clairement ce qui manque.
+- Faire tests du build, vérifier auth et CRUD et UI réels autant que les outils le permettent, corriger erreurs, puis produire bilan transparent "fonctionnel / nécessite configuration / bloqué par API GBP" sans dire déployé si ce n'est pas vraiment publié. Préparer le produit pour publication Lovable et utilisation sur autre PC.
+
+Travaille en autonomie et construis la meilleure version réalisable en un passage. N'interromps pas pour poser des questions esthétiques ou produit: tout est spécifié.
 
 This project was built with [Lovable](https://lovable.dev).
 
 ## Build with Lovable
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+Continue developing this project in the [Lovable editor](https://lovable.dev/projects/c5f83654-c3cb-48f2-8453-f2c1ad47a6f6).
 
 - **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+- **Stay in sync**: every change made in Lovable is committed straight to this repository.
+- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
 
 ## Development
 
@@ -20,10 +48,3 @@ cd <repository-name>
 npm i
 npm run dev
 ```
-
-## Built with
-
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
